@@ -1,134 +1,88 @@
-﻿const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
-// Exemplos com cópias nas extremidades para transições contínuas.
-document.querySelectorAll('.plan-examples').forEach(carousel => {
-  const viewport = carousel.querySelector('.examples-track');
-  const slides = [...viewport.querySelectorAll('.example-slide')];
-
-  const total = slides.length;
-  const first = slides[0].cloneNode(true);
-  const last = slides[total - 1].cloneNode(true);
-  [first, last].forEach(clone => clone.setAttribute('aria-hidden', 'true'));
-  viewport.prepend(last);
-  viewport.append(first);
-  let width = 0;
-  let timer;
-  let busy = false;
-  let touching = false;
-  const step = () => slides[0].getBoundingClientRect().width + parseFloat(getComputedStyle(viewport).gap);
-  function jump(position) {
-    viewport.style.scrollSnapType = 'none';
-    viewport.scrollTo({left: position * width, behavior: 'instant'});
-    requestAnimationFrame(() => { viewport.style.scrollSnapType = ''; });
-  }
-  function update() {
-    if (!width) return;
-    const position = Math.round(viewport.scrollLeft / width);
-    const index = ((position - 1) % total + total) % total;
-  }
-  function settle() {
-    if (touching || !width) return;
-    const position = Math.round(viewport.scrollLeft / width);
-    if (position === 0) jump(total);
-    else if (position === total + 1) jump(1);
-    busy = false;
-    update();
-  }
-  function navigate(direction) {
-    if (busy || touching || !width) return;
-    settle();
-    const position = Math.round(viewport.scrollLeft / width);
-    busy = true;
-    viewport.scrollTo({left: (position + direction) * width, behavior: reducedMotion.matches ? 'instant' : 'smooth'});
-  }
-  let visible = false;
-  let pauseUntil = 0;
-  const pauseForInteraction = () => { pauseUntil = Date.now() + 5000; };
-  viewport.addEventListener('touchstart', pauseForInteraction, {passive:true});
-  viewport.addEventListener('pointerdown', pauseForInteraction, {passive:true});
-  viewport.addEventListener('keydown', pauseForInteraction);
-  new IntersectionObserver(entries => {
-    visible = entries[0].isIntersecting;
-  }, {threshold:0.25}).observe(viewport);
-  setInterval(() => {
-    if (visible && !document.hidden && Date.now() >= pauseUntil) navigate(1);
-  }, 3500);
-  viewport.addEventListener('keydown', event => {
-    if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
-      event.preventDefault(); navigate(event.key === 'ArrowRight' ? 1 : -1);
-    }
-  });
-  viewport.addEventListener('scroll', () => {
-    update();
-    clearTimeout(timer);
-    timer = setTimeout(settle, 160);
-  }, {passive:true});
-  viewport.addEventListener('scrollend', settle);
-  viewport.addEventListener('touchstart', () => { touching = true; }, {passive:true});
-  function endTouch() { touching = false; pauseForInteraction(); clearTimeout(timer); timer = setTimeout(settle, 160); }
-  viewport.addEventListener('touchend', endTouch, {passive:true});
-  viewport.addEventListener('touchcancel', endTouch, {passive:true});
-  new ResizeObserver(() => {
-    const nextWidth = step();
-    if (Math.abs(nextWidth - width) < .5) return;
-    const current = width ? Math.round(viewport.scrollLeft / width) : 1;
-    width = nextWidth;
-    jump(Math.max(1, Math.min(total, current)));
-    busy = false;
-    update();
-  }).observe(viewport);
-});
-// Carrossel horizontal circular com conjuntos duplicados nas extremidades.
+﻿'use strict';
 (() => {
-  const root = document.querySelector('.testimonials-carousel');
-  const viewport = root.querySelector('.testimonials-grid');
-  const originals = [...viewport.children];
-  const total = originals.length;
-  const counter = root.querySelector('.review-count');
-  originals.forEach((card, i) => {
-    card.setAttribute('role', 'group');
-    card.setAttribute('aria-label', `${i + 1} de ${total}`);
-  });
-  function cloneSet() {
-    const fragment = document.createDocumentFragment();
-    originals.forEach(card => {
+  const motion = matchMedia('(prefers-reduced-motion: reduce)');
+  const saving = navigator.connection && navigator.connection.saveData;
+  function watch(element, callback) {
+    if (!('IntersectionObserver' in window)) { callback(true); return; }
+    new IntersectionObserver(entries => callback(entries[0].isIntersecting), {threshold:0.15}).observe(element);
+  }
+  document.querySelectorAll('.examples-track, .testimonials-grid').forEach(track => {
+    const cards = [...track.children];
+    if (cards.length < 2) return;
+    const count = cards.length;
+    const copies = track.classList.contains('examples-track') ? 1 : Math.min(5, count);
+    function duplicate(card) {
       const clone = card.cloneNode(true);
       clone.setAttribute('aria-hidden', 'true');
-      fragment.appendChild(clone);
-    });
-    return fragment;
-  }
-  viewport.prepend(cloneSet());
-  viewport.append(cloneSet());
-  const step = () => originals[0].getBoundingClientRect().width + parseFloat(getComputedStyle(viewport).gap);
-  let initialized = false;
-  function sync() {
-    const width = step();
-    const cycle = width * total;
-    if (!cycle) return;
-    if (viewport.scrollLeft < cycle - width / 2) viewport.scrollLeft += cycle;
-    else if (viewport.scrollLeft >= cycle * 2 - width / 2) viewport.scrollLeft -= cycle;
-    const index = ((Math.round(viewport.scrollLeft / width) % total) + total) % total;
-    counter.textContent = `${String(index + 1).padStart(2, '0')} / ${total}`;
-  }
-  function move(direction) { viewport.scrollLeft += direction * step(); sync(); }
-  root.querySelector('.review-prev').addEventListener('click', () => move(-1));
-  root.querySelector('.review-next').addEventListener('click', () => move(1));
-  viewport.addEventListener('keydown', event => {
-    if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
-      event.preventDefault(); move(event.key === 'ArrowRight' ? 1 : -1);
+      return clone;
     }
+    track.prepend(...cards.slice(-copies).map(duplicate));
+    track.append(...cards.slice(0, copies).map(duplicate));
+    let step = 0, visible = false, touching = false, settled, timer, cooldown = 0;
+    function jump(index) {
+      track.style.scrollSnapType = 'none';
+      track.scrollLeft = index * step;
+      requestAnimationFrame(() => { track.style.scrollSnapType = ''; });
+    }
+    function normalize() {
+      if (!step || touching) return;
+      const index = Math.round(track.scrollLeft / step);
+      if (index < copies) jump(index + count);
+      else if (index >= copies + count) jump(index - count);
+    }
+    function measure() {
+      const next = cards[0].getBoundingClientRect().width + (parseFloat(getComputedStyle(track).gap) || 0);
+      if (Math.abs(next - step) < .5) return;
+      const index = step ? Math.round(track.scrollLeft / step) : copies;
+      step = next;
+      jump(Math.max(copies, Math.min(copies + count - 1, index)));
+    }
+    function move(direction) {
+      if (!step || touching) return;
+      normalize();
+      track.scrollBy({left: direction * step, behavior: motion.matches ? 'auto' : 'smooth'});
+    }
+    function schedule() {
+      clearTimeout(timer);
+      if (!visible || document.hidden || motion.matches || saving) return;
+      timer = setTimeout(() => {
+        if (!touching && Date.now() > cooldown) move(1);
+        schedule();
+      }, 4500);
+    }
+    track.addEventListener('scroll', () => {
+      clearTimeout(settled);
+      settled = setTimeout(normalize, 180);
+    }, {passive:true});
+    track.addEventListener('touchstart', () => { touching = true; }, {passive:true});
+    function release() { touching = false; cooldown = Date.now() + 5000; settled = setTimeout(normalize, 180); }
+    track.addEventListener('touchend', release, {passive:true});
+    track.addEventListener('touchcancel', release, {passive:true});
+    track.addEventListener('keydown', event => {
+      if (!['ArrowLeft', 'ArrowRight'].includes(event.key)) return;
+      event.preventDefault(); cooldown = Date.now() + 5000;
+      move(event.key === 'ArrowRight' ? 1 : -1);
+    });
+    watch(track, value => { visible = value; schedule(); });
+    document.addEventListener('visibilitychange', schedule);
+    if (motion.addEventListener) motion.addEventListener('change', schedule);
+    if ('ResizeObserver' in window) new ResizeObserver(measure).observe(track);
+    else window.addEventListener('resize', measure);
+    measure();
   });
-  viewport.addEventListener('scroll', () => { if (initialized) sync(); }, {passive:true});
-  new ResizeObserver(() => {
-    initialized = false;
-    viewport.scrollLeft = step() * total;
-    initialized = true;
-    sync();
-  }).observe(viewport);
+  const video = document.querySelector('.platform-video');
+  if (video) {
+    let visible = false;
+    function playback() {
+      const manual = motion.matches || saving;
+      video.controls = !!manual;
+      if (manual || !visible || document.hidden) { video.pause(); return; }
+      video.muted = true;
+      const playing = video.play();
+      if (playing) playing.catch(() => { video.controls = true; });
+    }
+    watch(video, value => { visible = value; playback(); });
+    document.addEventListener('visibilitychange', playback);
+    if (motion.addEventListener) motion.addEventListener('change', playback);
+  }
 })();
-
-
-
-
-
-

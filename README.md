@@ -1,18 +1,8 @@
-﻿# Crochês Landing Page
+﻿# Crochês — versão otimizada
+Envie index.html, style.css, script.js e assets/ para a raiz do repositório. Não é necessário compilar ou instalar dependências.
 
-Site estático em português, adaptado para celular, feito com HTML, CSS e JavaScript. Não requer instalação de dependências nem compilação.
+As imagens foram convertidas para WebP e o vídeo foi reduzido e ficou sem trilha de áudio. A reprodução automática pausa fora da tela. Preferências de movimento reduzido e economia de dados desativam o avanço automático e permitem reprodução manual do vídeo.
 
-## Arquivos
-- index.html: conteúdo e links de pagamento.
-- style.css: aparência e layout responsivo.
-- script.js: carrosséis e reprodução automática das fotos.
-- assets/: imagens e vídeo usados no site.
+Os depoimentos continuam identificados como exemplos ilustrativos.
 
-## Visualizar
-Abra index.html no navegador.
-
-## Enviar ao GitHub
-Extraia o ZIP e envie index.html, style.css, script.js, README.md, .gitignore e a pasta assets para a raiz do repositório. Preserve os nomes e as pastas.
-
-## Observação sobre o conteúdo
-Os depoimentos estão identificados como exemplos ilustrativos. Substitua-os por avaliações reais antes de usar como prova social.
+Validação: referências de arquivos, âncoras, IDs, sintaxe JavaScript e funcionamento sem seções opcionais. A revisão não substitui testes em aparelhos físicos nem uma auditoria do servidor de hospedagem ou do checkout externo.
